@@ -13,7 +13,14 @@ Entire task is comprised of four blocks (2 control and 2 order). First two
 blocks contain feedback for participant, last two blocks don't.
 
 Author: Kamil Bonna (bonna@doktorant.umk.pl)
-Version: t.3.3
+Version: t.3.4
+
+Features:
+- adaptivness:
+    Feedback disappears when subject has >50% correct responses during demanding
+    order condition, and finishes if subject has >66% correct responses in order
+    condition only if feedback was not delivered. To minimise frustration of
+    subjects during first blocks response time is unlimited. (added 15/10/19)
 """
 from psychopy import visual, core, event, gui, data
 from random import sample, shuffle
@@ -51,8 +58,12 @@ key_quit = 'q'
 # Timing (in seconds)
 time_fix = 4
 time_info = 4
-time_digit = 2
+time_digit = [float("inf"), float("inf"), 3, 2, 2, 2, 2, 2]
 time_feedback = 2
+
+# wait_till_end has to be False if coresponing time_digit is inf!
+wait_till_end = [False, False, True, True, True, True, True, True]
+max_n_blocks = 8
 
 ### Global keys ################################################################
 event.globalKeys.clear()
@@ -144,11 +155,12 @@ instr = visual.ImageStim(
 ### Experiment #################################################################
 # Create clocks
 timer = core.CountdownTimer()
+rtimer = core.Clock() # For reaction time
 
 # Data handlers
 exp = data.ExperimentHandler(
     name='ot_Dyscalculia_training',
-    version='t.3.2',
+    version='t.3.3',
     dataFileName=filename,
     extraInfo={'subject_id': subject_id})
 
@@ -165,7 +177,7 @@ stop_cond = False
 feedback = True
 accu = []
 
-while (stop_cond == False) and (block <= 7):
+while (stop_cond == False) and (block <= max_n_blocks-1):
 
     block += 1
 
@@ -211,16 +223,18 @@ while (stop_cond == False) and (block <= 7):
             digit_r.setText(text=thisTrial['digit_r']); digit_r.draw()
             digit_c.setText(text=thisTrial['digit_c']); digit_c.draw()
             mywin.flip()
-            timer.reset(t=time_digit)
+            timer.reset(t=time_digit[block-1])
+            rtimer.reset()
 
             response = event.waitKeys(
-                maxWait=time_digit,
+                maxWait=time_digit[block-1],
                 keyList=[key_left, key_right],
-                timeStamped=timer,
+                timeStamped=rtimer,
                 clearEvents=True)
 
-            while timer.getTime() > 0:
-                digit_l.draw(); digit_r.draw(); digit_c.draw(); mywin.flip()
+            if wait_till_end[block-1]:
+                while timer.getTime() > 0:
+                    digit_l.draw(); digit_r.draw(); digit_c.draw(); mywin.flip()
 
             ### analyze response ###############################################
             if response == None:
@@ -231,18 +245,18 @@ while (stop_cond == False) and (block <= 7):
                 keypressed = key_right
                 if condition == 'control':
                     correct = int(thisTrial['is_target'] == 1)
-                    rt = time_digit + response[0][1]
+                    rt = response[0][1]
                 else: #condition == 'order':
                     correct = int(abs(thisTrial['is_order']) == 1)
-                    rt = time_digit + response[0][1]
+                    rt = response[0][1]
             elif response[0][0] == key_left:
                 keypressed = key_left
                 if condition == 'control':
                     correct = int(thisTrial['is_target'] == 0)
-                    rt = time_digit + response[0][1]
+                    rt = response[0][1]
                 else: #condition == 'order':
                     correct = int(thisTrial['is_order'] == 0)
-                    rt = time_digit + response[0][1]
+                    rt = response[0][1]
 
             # Save responses in TrialHandler
             trials.addData('rt', rt)
@@ -275,9 +289,9 @@ while (stop_cond == False) and (block <= 7):
             # End task when accuracy >= 66% without feedback
             if corr_sum >= 8 and feedback == False:
                 stop_cond = True
-            # Turn off feedback when accuracy >= 50%
-            if corr_sum >= 6:   feedback = False
-            else:               feedback = True
+            # Turn off feedback when accuracy >= 50% (from second block)
+            if corr_sum >= 6 and block >= 2:    feedback = False
+            else:                               feedback = True
 
             accu.append(corr_sum / 12)
 
